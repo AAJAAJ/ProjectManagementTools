@@ -6,6 +6,7 @@ dist/
 dist-electron/
 release/
 dist-release/
+dist-release-v2/
 
 # 数据存储目录（运行时生成）
 data/
