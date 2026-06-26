@@ -1,0 +1,59 @@
+/**
+ * electron-builder 配置
+ * 构建 Windows NSIS 安装包 + 便携版
+ */
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "com.project-management-tools.app",
+  "productName": "ProjectManagementTools",
+  "copyright": "Copyright © 2026 AAJAAJ",
+  "directories": {
+    "output": "dist-release",
+    "buildResources": "build"
+  },
+  "files": [
+    "dist/**/*",
+    "dist-electron/**/*"
+  ],
+  "extraResources": [
+    {
+      "from": "build/icon.ico",
+      "to": "icon.ico"
+    }
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "build/icon.ico",
+    "artifactName": "ProjectManagementTools_setup.${ext}"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": true,
+    "allowElevation": true,
+    "allowToChangeInstallationDirectory": true,
+    "installerIcon": "build/icon.ico",
+    "uninstallerIcon": "build/icon.ico",
+    "installerHeaderIcon": "build/icon.ico",
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "项目管理工具",
+    "menuCategory": "ProjectManagementTools",
+    "include": "build/installer.nsh",
+    "deleteAppDataOnUninstall": false,
+    "displayLanguageSelector": false,
+    "language": "2052",
+    "installerLanguages": ["zh_CN"],
+    "packElevateHelper": true
+  },
+  "publish": {
+    "provider": "github",
+    "owner": "AAJAAJ",
+    "repo": "ProjectManagementTools",
+    "releaseType": "release"
+  }
+}
