@@ -5,7 +5,7 @@ import { registerProjectHandlers } from './ipc/project'
 import { registerEditorHandlers } from './ipc/editor'
 import { registerFileHandlers } from './ipc/file'
 import { registerSearchHandlers } from './ipc/search'
-import { registerSettingsHandlers, getCurrentSettings } from './ipc/settings'
+import { registerSettingsHandlers, getCurrentSettings, updateCurrentSettings } from './ipc/settings'
 import { registerGroupHandlers } from './ipc/group'
 import { registerToolHandlers } from './ipc/tool'
 import { initStore } from './store'
@@ -74,11 +74,20 @@ function createMainWindow(): void {
     mainWindow = null
   })
 
-  // 关闭时最小化到托盘而不是退出（可选行为）
+  // 关闭请求：按记忆行为直接执行，否则交由渲染进程弹窗确认
   mainWindow.on('close', (event) => {
-    if (tray && !(app as any).isQuitting) {
-      event.preventDefault()
+    if ((app as any).isQuitting) {
+      return // 允许真正退出
+    }
+    event.preventDefault()
+    const closeAction = getCurrentSettings().closeAction
+    if (closeAction === 'minimize') {
       mainWindow?.hide()
+    } else if (closeAction === 'quit') {
+      ;(app as any).isQuitting = true
+      app.quit()
+    } else {
+      mainWindow?.webContents.send('window:close-requested')
     }
   })
 }
@@ -149,6 +158,20 @@ function toAccelerator(hotkey: string): string {
     .join('+')
 }
 
+/** 比较语义化版本号，返回 >0 表示 a>b，<0 表示 a<b，0 表示相等 */
+function compareVersions(a: string, b: string): number {
+  const partsA = a.split('.').map(n => parseInt(n, 10) || 0)
+  const partsB = b.split('.').map(n => parseInt(n, 10) || 0)
+  const maxLen = Math.max(partsA.length, partsB.length)
+  for (let i = 0; i < maxLen; i++) {
+    const va = partsA[i] || 0
+    const vb = partsB[i] || 0
+    if (va > vb) return 1
+    if (va < vb) return -1
+  }
+  return 0
+}
+
 function registerGlobalShortcuts(): void {
   const settings = getCurrentSettings()
   // 全局搜索快捷键
@@ -164,9 +187,13 @@ function registerGlobalShortcuts(): void {
   try {
     globalShortcut.register(toAccelerator(mainWindowHotkey), () => {
       if (mainWindow) {
-        if (mainWindow.isMinimized()) mainWindow.restore()
-        mainWindow.show()
-        mainWindow.focus()
+        if (mainWindow.isVisible() && mainWindow.isFocused()) {
+          mainWindow.hide()
+        } else {
+          if (mainWindow.isMinimized()) mainWindow.restore()
+          mainWindow.show()
+          mainWindow.focus()
+        }
       } else {
         createMainWindow()
       }
@@ -198,26 +225,21 @@ function createTray(): void {
 
   tray = new Tray(icon.resize({ width: 16, height: 16 }))
 
+  const settings = getCurrentSettings()
+  const mainWindowHotkey = settings.mainWindowHotkey || 'Alt+P'
+  const searchHotkey = settings.hotkey || 'Alt+Space'
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: '显示主窗口',
+      label: `显示主窗口  ${mainWindowHotkey}`,
       click: () => {
         mainWindow?.show()
         mainWindow?.focus()
       }
     },
     {
-      label: '搜索',
-      accelerator: 'Alt+Space',
+      label: `搜索  ${searchHotkey}`,
       click: () => {
         createSearchWindow()
-      }
-    },
-    { type: 'separator' },
-    {
-      label: '最小化到托盘',
-      click: () => {
-        mainWindow?.hide()
       }
     },
     { type: 'separator' },
@@ -303,6 +325,17 @@ function registerWindowHandlers(): void {
   ipcMain.handle('window:close', () => {
     mainWindow?.close()
   })
+  ipcMain.handle('window:executeClose', async (_event, action: string, remember: boolean) => {
+    if (remember) {
+      updateCurrentSettings({ closeAction: action })
+    }
+    if (action === 'minimize') {
+      mainWindow?.hide()
+    } else if (action === 'quit') {
+      ;(app as any).isQuitting = true
+      app.quit()
+    }
+  })
   ipcMain.handle('window:isMaximized', () => {
     return mainWindow?.isMaximized() ?? false
   })
@@ -329,7 +362,14 @@ autoUpdater.autoInstallOnAppQuit = false  // 不在退出时自动安装
 ipcMain.handle('updater:check', async () => {
   try {
     const result = await autoUpdater.checkForUpdates()
-    return { hasUpdate: !!result?.updateInfo, version: result?.updateInfo?.version || null, releaseNotes: result?.updateInfo?.releaseNotes || null }
+    if (!result?.updateInfo) {
+      return { hasUpdate: false, version: null, releaseNotes: null }
+    }
+    const currentVersion = app.getVersion()
+    const remoteVersion = result.updateInfo.version
+    // 比较版本号：只有远程版本大于当前版本才算有更新
+    const hasUpdate = compareVersions(remoteVersion, currentVersion) > 0
+    return { hasUpdate, version: remoteVersion, releaseNotes: result.updateInfo.releaseNotes || null }
   } catch (e) {
     return { hasUpdate: false, version: null, error: (e as Error).message }
   }

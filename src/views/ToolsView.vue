@@ -146,6 +146,11 @@
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
             </svg>
           </button>
+          <button class="btn btn-sm" @click="openToolDirectory(tool)" title="打开所在目录" v-if="tool.type !== 'command'">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+          </button>
           <button class="btn btn-sm btn-danger-ghost" @click="deleteTool(tool.id)" title="删除">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="3,6 5,6 21,6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -239,12 +244,17 @@
               <div class="icon-preview" v-if="form.iconPath">
                 <img :src="toFileUrl(form.iconPath)" class="icon-preview-img" />
               </div>
+              <div class="icon-preview icon-preview-letter" v-else-if="form.icon">
+                <span>{{ form.icon.charAt(0).toUpperCase() }}</span>
+              </div>
               <div class="icon-preview icon-preview-placeholder" v-else>
                 <span>无</span>
               </div>
+              <input v-model="form.icon" class="input icon-letter-input" placeholder="字母" maxlength="2" />
               <button class="btn" @click="selectIcon">选择图标</button>
-              <button class="btn btn-ghost" @click="form.iconPath = ''" v-if="form.iconPath">清除</button>
+              <button class="btn btn-ghost" @click="clearIcon" v-if="form.iconPath || form.icon">清除</button>
             </div>
+            <p class="text-muted text-sm" style="margin-top: 4px;">输入1-2个字母作为图标，或选择图标文件</p>
           </div>
 
           <div class="form-group">
@@ -564,6 +574,11 @@ async function selectIcon() {
   }
 }
 
+function clearIcon() {
+  form.icon = ''
+  form.iconPath = ''
+}
+
 function addTag() {
   const tag = tagInput.value.trim()
   if (tag && !form.tags.includes(tag)) {
@@ -660,6 +675,22 @@ async function openTool(id: string) {
     await window.electronAPI.openTool(id)
   } catch (e) {
     console.error('打开工具失败:', e)
+  }
+}
+
+async function openToolDirectory(tool: ToolItem) {
+  try {
+    if (tool.type === 'directory') {
+      await window.electronAPI.openFolder(tool.path)
+    } else if (tool.type === 'executable') {
+      // 打开可执行文件所在目录
+      const dir = tool.path.replace(/[\\/][^\\/]+$/, '')
+      if (dir) {
+        await window.electronAPI.openFolder(dir)
+      }
+    }
+  } catch (e) {
+    console.error('打开所在目录失败:', e)
   }
 }
 
@@ -1246,5 +1277,19 @@ function resetScan() {
 .icon-preview-placeholder {
   color: var(--text-tertiary);
   font-size: var(--font-sm);
+}
+
+.icon-preview-letter {
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.icon-letter-input {
+  width: 64px;
+  flex-shrink: 0;
+  text-align: center;
+  text-transform: uppercase;
 }
 </style>

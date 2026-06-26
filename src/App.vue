@@ -41,11 +41,39 @@
       </main>
     </div>
     <SearchOverlay v-if="searchStore.isVisible" />
+
+    <!-- 关闭确认对话框 -->
+    <div v-if="closeDialogVisible" class="dialog-overlay" @click.self="cancelClose">
+      <div class="dialog close-dialog">
+        <div class="dialog-header">
+          <h2>您点击了关闭按钮</h2>
+        </div>
+        <div class="dialog-body">
+          <p class="close-tip">您想要：</p>
+          <label class="close-option">
+            <input type="radio" v-model="closeAction" value="minimize" />
+            <span>最小化到托盘</span>
+          </label>
+          <label class="close-option">
+            <input type="radio" v-model="closeAction" value="quit" />
+            <span>退出</span>
+          </label>
+          <label class="close-remember">
+            <input type="checkbox" v-model="closeRemember" />
+            <span>不再提醒</span>
+          </label>
+        </div>
+        <div class="dialog-footer">
+          <button class="btn" @click="cancelClose">取消</button>
+          <button class="btn btn-primary" @click="confirmClose">确认</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import TitleBar from './components/TitleBar.vue'
 import SearchOverlay from './components/SearchOverlay.vue'
@@ -61,6 +89,28 @@ const projectStore = useProjectStore()
 const themeClass = computed(() => {
   return `theme-${settingsStore.currentTheme}`
 })
+
+// 关闭确认对话框
+const closeDialogVisible = ref(false)
+const closeAction = ref<'minimize' | 'quit'>('minimize')
+const closeRemember = ref(false)
+
+function cancelClose() {
+  closeDialogVisible.value = false
+  closeRemember.value = false
+}
+
+async function confirmClose() {
+  const action = closeAction.value
+  const remember = closeRemember.value
+  closeDialogVisible.value = false
+  closeRemember.value = false
+  try {
+    await window.electronAPI.executeClose(action, remember)
+  } catch (e) {
+    console.error('执行关闭操作失败:', e)
+  }
+}
 
 function handleKeydown(e: KeyboardEvent) {
   // 应用内搜索快捷键（可自定义）
@@ -99,6 +149,10 @@ onMounted(async () => {
     } else {
       router.push(`/project/${projectId}`)
     }
+  })
+  // 监听关闭请求，弹出确认对话框
+  window.electronAPI.onCloseRequested(() => {
+    closeDialogVisible.value = true
   })
 })
 
@@ -235,5 +289,51 @@ onUnmounted(() => {
   flex: 1;
   overflow-y: auto;
   padding: 24px 28px;
+}
+
+/* 关闭确认对话框 */
+.close-dialog {
+  max-width: 380px;
+}
+
+.close-tip {
+  margin: 0 0 12px;
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.close-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.close-option:hover {
+  background: var(--bg-hover);
+}
+
+.close-option input {
+  cursor: pointer;
+}
+
+.close-remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+  cursor: pointer;
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.close-remember input {
+  cursor: pointer;
 }
 </style>

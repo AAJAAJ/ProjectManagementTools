@@ -19,6 +19,7 @@ const DEFAULT_SETTINGS: Settings = {
   defaultEditorId: '',
   firstRun: true,
   autoUpdate: true,
+  closeAction: '',
 }
 
 /**
@@ -26,6 +27,16 @@ const DEFAULT_SETTINGS: Settings = {
  */
 export function getCurrentSettings(): Settings {
   return readData<Settings>(SETTINGS_FILE, DEFAULT_SETTINGS)
+}
+
+/**
+ * 更新当前设置（供主进程其他模块直接持久化部分字段）
+ */
+export function updateCurrentSettings(partial: Partial<Settings>): Settings {
+  const current = readData<Settings>(SETTINGS_FILE, DEFAULT_SETTINGS)
+  const updated: Settings = { ...DEFAULT_SETTINGS, ...current, ...partial }
+  writeData(SETTINGS_FILE, updated)
+  return updated
 }
 
 /**

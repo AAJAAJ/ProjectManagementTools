@@ -80,6 +80,7 @@ export interface Settings {
   defaultEditorId: string     // 默认编辑器ID
   firstRun: boolean           // 是否首次运行（用于自动扫描）
   autoUpdate?: boolean  // 是否启用自动更新
+  closeAction?: string  // 关闭行为：'' 未设置(询问)，'minimize' 最小化到托盘，'quit' 退出
 }
 
 /** 扫描导入结果 */
@@ -186,6 +187,8 @@ export interface ElectronAPI {
   windowMaximize(): Promise<void>
   windowClose(): Promise<void>
   windowIsMaximized(): Promise<boolean>
+  onCloseRequested(callback: () => void): void
+  executeClose(action: string, remember: boolean): Promise<void>
 
   // 搜索窗口控制
   hideSearchWindow(): Promise<void>

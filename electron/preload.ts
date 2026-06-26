@@ -77,6 +77,10 @@ const electronAPI = {
   windowMaximize: () => ipcRenderer.invoke('window:maximize'),
   windowClose: () => ipcRenderer.invoke('window:close'),
   windowIsMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+  onCloseRequested: (callback: () => void) => {
+    ipcRenderer.on('window:close-requested', () => callback())
+  },
+  executeClose: (action: string, remember: boolean) => ipcRenderer.invoke('window:executeClose', action, remember),
 
   // 搜索窗口控制
   hideSearchWindow: () => ipcRenderer.invoke('searchWindow:hide'),
