@@ -12,7 +12,7 @@ const DEFAULT_SETTINGS: Settings = {
   toolWorkspacePath: '',
   hotkey: 'Alt+Space',
   appHotkey: 'Ctrl+F',
-  mainWindowHotkey: 'Alt+P',
+  mainWindowHotkey: 'Alt+W',
   theme: 'system',
   editors: [],
   customEditors: [],

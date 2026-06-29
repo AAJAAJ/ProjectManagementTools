@@ -8,13 +8,14 @@ export const useSettingsStore = defineStore('settings', () => {
     toolWorkspacePath: '',
     hotkey: 'Alt+Space',
     appHotkey: 'Ctrl+F',
-    mainWindowHotkey: 'Alt+P',
+    mainWindowHotkey: 'Alt+W',
     theme: 'system',
     editors: [],
     customEditors: [],
     defaultEditorId: '',
     firstRun: true,
     autoUpdate: true,
+    closeAction: '',
   })
   const loading = ref(false)
 

@@ -10,12 +10,9 @@ import { registerGroupHandlers } from './ipc/group'
 import { registerToolHandlers } from './ipc/tool'
 import { initStore } from './store'
 
-// 数据存储路径：应用所在目录下的 ./data 文件夹（绿色便携）
+// 数据存储路径：使用 userData 目录（%APPDATA%/ProjectManagementTools），确保更新后数据不丢失
 const getDataPath = (): string => {
-  if (app.isPackaged) {
-    return join(process.resourcesPath, '..', 'data')
-  }
-  return join(app.getAppPath(), 'data')
+  return app.getPath('userData')
 }
 
 let mainWindow: BrowserWindow | null = null

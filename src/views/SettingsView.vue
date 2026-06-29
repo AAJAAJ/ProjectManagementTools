@@ -32,6 +32,32 @@
         </div>
       </section>
 
+      <!-- 窗口行为 -->
+      <section class="settings-section">
+        <h2>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/>
+          </svg>
+          窗口行为
+        </h2>
+        <div class="setting-item">
+          <div class="setting-info">
+            <label>关闭按钮行为</label>
+            <p>点击窗口关闭按钮时的操作</p>
+          </div>
+          <div class="theme-switcher">
+            <button
+              v-for="option in closeActionOptions"
+              :key="option.value"
+              :class="['theme-option', { active: closeAction === option.value }]"
+              @click="setCloseAction(option.value)"
+            >
+              <span>{{ option.label }}</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
       <!-- 快捷键 -->
       <section class="settings-section">
         <h2>
@@ -341,7 +367,7 @@
           </div>
           <div class="about-row">
             <span class="about-label">版本</span>
-            <span>1.0.0</span>
+            <span>1.0.1</span>
           </div>
           <div class="about-row">
             <span class="about-label">技术栈</span>
@@ -439,9 +465,17 @@ const themeOptions = [
   { value: 'system' as const, label: '系统', icon: '💻' }
 ]
 
+const closeActionOptions = [
+  { value: '', label: '询问' },
+  { value: 'minimize', label: '最小化到托盘' },
+  { value: 'quit', label: '直接退出' }
+]
+const closeAction = ref('')
+
 onMounted(async () => {
   await settingsStore.loadSettings()
   theme.value = settingsStore.settings.theme
+  closeAction.value = settingsStore.settings.closeAction || ''
   await refreshEditors()
 
   // 注册自动更新事件监听
@@ -471,6 +505,11 @@ function getEditorIconText(editor: Editor): string {
 async function setTheme(value: 'light' | 'dark' | 'system') {
   theme.value = value
   await settingsStore.updateSettings({ theme: value })
+}
+
+async function setCloseAction(value: string) {
+  closeAction.value = value
+  await settingsStore.updateSettings({ closeAction: value })
 }
 
 async function selectWorkspace() {
@@ -689,9 +728,10 @@ async function stopRecordHotkey() {
 async function onHotkeyKeyDown(e: KeyboardEvent) {
   e.preventDefault()
   e.stopPropagation()
+  e.returnValue = false
   // 按 Escape 取消录制
   if (e.key === 'Escape') {
-    stopRecordHotkey()
+    await stopRecordHotkey()
     return
   }
   // 仅按下修饰键时不结束录制
@@ -705,7 +745,8 @@ async function onHotkeyKeyDown(e: KeyboardEvent) {
   if (e.shiftKey) parts.push('Shift')
 
   let keyName = e.key
-  if (keyName === ' ') keyName = 'Space'
+  // 兼容 Alt+Space 等场景：同时检查 e.key 和 e.code
+  if (keyName === ' ' || e.code === 'Space') keyName = 'Space'
   else if (keyName.length === 1) keyName = keyName.toUpperCase()
   else if (keyName === 'ArrowUp') keyName = 'Up'
   else if (keyName === 'ArrowDown') keyName = 'Down'
@@ -715,9 +756,18 @@ async function onHotkeyKeyDown(e: KeyboardEvent) {
 
   const combo = parts.join('+')
   const targetKey = recordingHotkey.value
-  stopRecordHotkey()
+  // 先移除监听和停止录制 UI 状态
+  recordingHotkey.value = null
+  window.removeEventListener('keydown', onHotkeyKeyDown, true)
+  // 先保存新快捷键到设置
   if (targetKey) {
     await settingsStore.updateSettings({ [targetKey]: combo } as any)
+  }
+  // 保存完成后再恢复全局快捷键注册（此时读取的是最新设置）
+  try {
+    await window.electronAPI.restoreHotkeyRecord()
+  } catch (e) {
+    console.warn('restoreHotkeyRecord 失败:', e)
   }
 }
 
