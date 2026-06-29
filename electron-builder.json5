@@ -7,6 +7,7 @@
   "appId": "com.project-management-tools.app",
   "productName": "ProjectManagementTools",
   "copyright": "Copyright © 2026 AAJAAJ",
+  "buildVersion": "260629",
   "directories": {
     "output": "dist-release",
     "buildResources": "build"
