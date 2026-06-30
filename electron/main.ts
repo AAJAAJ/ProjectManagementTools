@@ -415,6 +415,7 @@ ipcMain.handle('updater:download', async () => {
 // 安装更新并重启（设置标志跳过关闭弹窗）
 ipcMain.handle('updater:install', async () => {
   isQuittingForUpdate = true
+  ;(app as any).isQuitting = true
   autoUpdater.quitAndInstall()
 })
 

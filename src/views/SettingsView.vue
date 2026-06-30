@@ -69,47 +69,23 @@
         <div class="setting-item">
           <div class="setting-info">
             <label>全局搜索快捷键</label>
-            <p>在任何位置呼出搜索窗口（按 Esc 取消录制）</p>
+            <p>在任何位置呼出搜索窗口</p>
           </div>
-          <div class="hotkey-input-group">
-            <button
-              :class="['hotkey-record-badge', { recording: recordingHotkey === 'hotkey' }]"
-              @click="startRecordHotkey('hotkey')"
-            >
-              {{ recordingHotkey === 'hotkey' ? '按下组合键...' : (settingsStore.settings.hotkey || '未设置') }}
-            </button>
-            <button class="hotkey-manual-link" @click="openManualHotkey('hotkey')">手动输入</button>
-          </div>
+          <span class="hotkey-badge-readonly">{{ settingsStore.settings.hotkey || '未设置' }}</span>
         </div>
         <div class="setting-item">
           <div class="setting-info">
             <label>应用内搜索</label>
-            <p>在应用内打开快速搜索（按 Esc 取消录制）</p>
+            <p>在应用内打开快速搜索</p>
           </div>
-          <div class="hotkey-input-group">
-            <button
-              :class="['hotkey-record-badge', { recording: recordingHotkey === 'appHotkey' }]"
-              @click="startRecordHotkey('appHotkey')"
-            >
-              {{ recordingHotkey === 'appHotkey' ? '按下组合键...' : (settingsStore.settings.appHotkey || '未设置') }}
-            </button>
-            <button class="hotkey-manual-link" @click="openManualHotkey('appHotkey')">手动输入</button>
-          </div>
+          <span class="hotkey-badge-readonly">{{ settingsStore.settings.appHotkey || '未设置' }}</span>
         </div>
         <div class="setting-item">
           <div class="setting-info">
             <label>打开主窗口</label>
-            <p>从任意位置打开主窗口（按 Esc 取消录制）</p>
+            <p>从任意位置打开主窗口</p>
           </div>
-          <div class="hotkey-input-group">
-            <button
-              :class="['hotkey-record-badge', { recording: recordingHotkey === 'mainWindowHotkey' }]"
-              @click="startRecordHotkey('mainWindowHotkey')"
-            >
-              {{ recordingHotkey === 'mainWindowHotkey' ? '按下组合键...' : (settingsStore.settings.mainWindowHotkey || '未设置') }}
-            </button>
-            <button class="hotkey-manual-link" @click="openManualHotkey('mainWindowHotkey')">手动输入</button>
-          </div>
+          <span class="hotkey-badge-readonly">{{ settingsStore.settings.mainWindowHotkey || '未设置' }}</span>
         </div>
       </section>
 
@@ -420,7 +396,7 @@
           </div>
           <div class="about-row">
             <span class="about-label">版本</span>
-            <span>1.0.1.260629</span>
+            <span>1.0.2</span>
           </div>
           <div class="about-row">
             <span class="about-label">技术栈</span>
@@ -461,25 +437,6 @@
       </div>
     </div>
 
-    <!-- 手动快捷键输入对话框（用于 Alt+Space 等系统拦截的组合） -->
-    <div v-if="showManualHotkeyDialog" class="dialog-overlay" @click.self="showManualHotkeyDialog = false">
-      <div class="dialog" style="max-width: 380px;">
-        <div class="dialog-header">
-          <h2>手动输入快捷键</h2>
-          <button class="btn btn-ghost btn-icon" @click="showManualHotkeyDialog = false">✕</button>
-        </div>
-        <div class="dialog-body">
-          <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
-            输入快捷键组合（用于录制无法捕获的系统组合键，如 Alt+Space）
-          </p>
-          <input v-model="manualHotkeyValue" class="input" placeholder="如 Alt+Space" @keyup.enter="confirmManualHotkey" autofocus />
-        </div>
-        <div class="dialog-footer">
-          <button class="btn" @click="showManualHotkeyDialog = false">取消</button>
-          <button class="btn btn-primary" @click="confirmManualHotkey" :disabled="!manualHotkeyValue.trim()">确定</button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -507,11 +464,6 @@ const downloadProgress = ref(0)
 const dataPath = ref('')
 const backups = ref<Array<{ name: string; date: string; files: string[] }>>([])
 
-// 手动快捷键输入
-const showManualHotkeyDialog = ref(false)
-const manualHotkeyValue = ref('')
-const manualHotkeyTarget = ref<'hotkey' | 'appHotkey' | 'mainWindowHotkey' | null>(null)
-
 // 添加编辑器表单状态
 const showEditorForm = ref(false)
 const editorForm = reactive({
@@ -529,9 +481,6 @@ const editForm = reactive({
   path: '',
   args: ''
 })
-
-// 快捷键录制状态
-const recordingHotkey = ref<'hotkey' | 'appHotkey' | 'mainWindowHotkey' | null>(null)
 
 const iconPresets = [
   { value: 'vscode', label: 'VS Code', display: 'VS' },
@@ -593,7 +542,6 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  stopRecordHotkey()
 })
 
 function getEditorIconText(editor: Editor): string {
@@ -806,76 +754,6 @@ async function saveEditorForm() {
   await refreshEditors()
 }
 
-// ========== 快捷键录制 ==========
-
-async function startRecordHotkey(key: 'hotkey' | 'appHotkey' | 'mainWindowHotkey') {
-  if (recordingHotkey.value) return
-  recordingHotkey.value = key
-  try {
-    await window.electronAPI.prepareHotkeyRecord()
-  } catch (e) {
-    console.warn('prepareHotkeyRecord 失败:', e)
-  }
-  window.addEventListener('keydown', onHotkeyKeyDown, true)
-}
-
-async function stopRecordHotkey() {
-  if (!recordingHotkey.value) return
-  recordingHotkey.value = null
-  window.removeEventListener('keydown', onHotkeyKeyDown, true)
-  try {
-    await window.electronAPI.restoreHotkeyRecord()
-  } catch (e) {
-    console.warn('restoreHotkeyRecord 失败:', e)
-  }
-}
-
-async function onHotkeyKeyDown(e: KeyboardEvent) {
-  e.preventDefault()
-  e.stopPropagation()
-  e.returnValue = false
-  // 按 Escape 取消录制
-  if (e.key === 'Escape') {
-    await stopRecordHotkey()
-    return
-  }
-  // 仅按下修饰键时不结束录制
-  const modifierKeys = ['Control', 'Shift', 'Alt', 'Meta']
-  if (modifierKeys.includes(e.key)) return
-
-  const parts: string[] = []
-  if (e.ctrlKey) parts.push('Ctrl')
-  if (e.metaKey) parts.push('Cmd')
-  if (e.altKey) parts.push('Alt')
-  if (e.shiftKey) parts.push('Shift')
-
-  let keyName = e.key
-  // 兼容 Alt+Space 等场景：同时检查 e.key 和 e.code
-  if (keyName === ' ' || e.code === 'Space') keyName = 'Space'
-  else if (keyName.length === 1) keyName = keyName.toUpperCase()
-  else if (keyName === 'ArrowUp') keyName = 'Up'
-  else if (keyName === 'ArrowDown') keyName = 'Down'
-  else if (keyName === 'ArrowLeft') keyName = 'Left'
-  else if (keyName === 'ArrowRight') keyName = 'Right'
-  parts.push(keyName)
-
-  const combo = parts.join('+')
-  const targetKey = recordingHotkey.value
-  // 先移除监听和停止录制 UI 状态
-  recordingHotkey.value = null
-  window.removeEventListener('keydown', onHotkeyKeyDown, true)
-  // 先保存新快捷键到设置
-  if (targetKey) {
-    await settingsStore.updateSettings({ [targetKey]: combo } as any)
-  }
-  // 保存完成后再恢复全局快捷键注册（此时读取的是最新设置）
-  try {
-    await window.electronAPI.restoreHotkeyRecord()
-  } catch (e) {
-    console.warn('restoreHotkeyRecord 失败:', e)
-  }
-}
-
 // ========== 自动更新 ==========
 
 async function toggleAutoUpdate() {
@@ -988,33 +866,6 @@ async function handleResetSettings() {
     alert('已恢复默认设置')
   } catch (e: any) {
     alert('恢复失败: ' + (e?.message || e))
-  }
-}
-
-// ========== 手动快捷键输入（用于 Alt+Space 等系统拦截的组合） ==========
-
-function openManualHotkey(target: 'hotkey' | 'appHotkey' | 'mainWindowHotkey') {
-  manualHotkeyTarget.value = target
-  manualHotkeyValue.value = settingsStore.settings[target] || ''
-  showManualHotkeyDialog.value = true
-}
-
-async function confirmManualHotkey() {
-  if (!manualHotkeyTarget.value || !manualHotkeyValue.value.trim()) {
-    showManualHotkeyDialog.value = false
-    return
-  }
-  const combo = manualHotkeyValue.value.trim()
-  const target = manualHotkeyTarget.value
-  showManualHotkeyDialog.value = false
-  manualHotkeyTarget.value = null
-  manualHotkeyValue.value = ''
-  // 保存并重新注册快捷键
-  await settingsStore.updateSettings({ [target]: combo } as any)
-  try {
-    await window.electronAPI.restoreHotkeyRecord()
-  } catch (e) {
-    console.warn('restoreHotkeyRecord 失败:', e)
   }
 }
 </script>
@@ -1135,7 +986,7 @@ async function confirmManualHotkey() {
   color: var(--text-primary);
 }
 
-.hotkey-record-badge {
+.hotkey-badge-readonly {
   padding: 6px 14px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
@@ -1143,22 +994,8 @@ async function confirmManualHotkey() {
   font-size: var(--font-sm);
   font-family: monospace;
   color: var(--text-primary);
-  cursor: pointer;
   min-width: 120px;
   text-align: center;
-  transition: all var(--transition-fast);
-}
-
-.hotkey-record-badge:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-
-.hotkey-record-badge.recording {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-  background: var(--color-primary-light);
-  animation: pulse 1s infinite;
 }
 
 @keyframes pulse {
@@ -1525,28 +1362,6 @@ async function confirmManualHotkey() {
   background: var(--color-primary);
   border-radius: var(--radius-full);
   transition: width 0.2s ease;
-}
-
-/* 快捷键输入组 */
-.hotkey-input-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.hotkey-manual-link {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  font-size: var(--font-xs);
-  cursor: pointer;
-  text-decoration: underline;
-  padding: 2px 4px;
-  white-space: nowrap;
-}
-
-.hotkey-manual-link:hover {
-  color: var(--color-primary);
 }
 
 /* 数据备份列表 */
