@@ -88,20 +88,6 @@ npm run build
 └── package.json
 ```
 
-## 开源协议
-
-本项目使用 MIT 协议。所使用的开源组件各自遵循其协议：
-
-- Electron: MIT
-- Vue: MIT
-- Vite: MIT
-- TypeScript: Apache-2.0
-- Pinia: MIT
-- Vue Router: MIT
-- vuedraggable: MIT
-- electron-builder: MIT
-- electron-updater: MIT
-
 ## 版本
 
 当前版本：v1.0.0

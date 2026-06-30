@@ -48,8 +48,16 @@ const electronAPI = {
   // 设置
   getSettings: () => ipcRenderer.invoke('settings:get'),
   updateSettings: (settings: any) => ipcRenderer.invoke('settings:update', settings),
+  resetSettings: () => ipcRenderer.invoke('settings:reset'),
   prepareHotkeyRecord: () => ipcRenderer.invoke('settings:prepareRecord'),
   restoreHotkeyRecord: () => ipcRenderer.invoke('settings:restoreRecord'),
+
+  // 数据备份与恢复
+  backupData: () => ipcRenderer.invoke('data:backup'),
+  restoreBackup: (backupName: string) => ipcRenderer.invoke('data:restore', backupName),
+  listBackups: () => ipcRenderer.invoke('data:listBackups'),
+  deleteBackup: (backupName: string) => ipcRenderer.invoke('data:deleteBackup', backupName),
+  getDataPath: () => ipcRenderer.invoke('data:getPath'),
 
   // 工具管理
   getTools: () => ipcRenderer.invoke('tool:getAll'),
@@ -65,6 +73,10 @@ const electronAPI = {
   checkForUpdates: () => ipcRenderer.invoke('updater:check'),
   downloadUpdate: () => ipcRenderer.invoke('updater:download'),
   installUpdate: () => ipcRenderer.invoke('updater:install'),
+  getUpdateState: () => ipcRenderer.invoke('updater:getState'),
+  onUpdateStateChanged: (callback: (state: { status: string; version: string; error: string; progress: number }) => void) => {
+    ipcRenderer.on('updater:state-changed', (_event, state) => callback(state))
+  },
   onDownloadProgress: (callback: (progress: { percent: number; transferred: number; total: number }) => void) => {
     ipcRenderer.on('updater:download-progress', (_event, progress) => callback(progress))
   },

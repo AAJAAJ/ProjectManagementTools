@@ -71,36 +71,45 @@
             <label>全局搜索快捷键</label>
             <p>在任何位置呼出搜索窗口（按 Esc 取消录制）</p>
           </div>
-          <button
-            :class="['hotkey-record-badge', { recording: recordingHotkey === 'hotkey' }]"
-            @click="startRecordHotkey('hotkey')"
-          >
-            {{ recordingHotkey === 'hotkey' ? '按下组合键...' : (settingsStore.settings.hotkey || '未设置') }}
-          </button>
+          <div class="hotkey-input-group">
+            <button
+              :class="['hotkey-record-badge', { recording: recordingHotkey === 'hotkey' }]"
+              @click="startRecordHotkey('hotkey')"
+            >
+              {{ recordingHotkey === 'hotkey' ? '按下组合键...' : (settingsStore.settings.hotkey || '未设置') }}
+            </button>
+            <button class="hotkey-manual-link" @click="openManualHotkey('hotkey')">手动输入</button>
+          </div>
         </div>
         <div class="setting-item">
           <div class="setting-info">
             <label>应用内搜索</label>
             <p>在应用内打开快速搜索（按 Esc 取消录制）</p>
           </div>
-          <button
-            :class="['hotkey-record-badge', { recording: recordingHotkey === 'appHotkey' }]"
-            @click="startRecordHotkey('appHotkey')"
-          >
-            {{ recordingHotkey === 'appHotkey' ? '按下组合键...' : (settingsStore.settings.appHotkey || '未设置') }}
-          </button>
+          <div class="hotkey-input-group">
+            <button
+              :class="['hotkey-record-badge', { recording: recordingHotkey === 'appHotkey' }]"
+              @click="startRecordHotkey('appHotkey')"
+            >
+              {{ recordingHotkey === 'appHotkey' ? '按下组合键...' : (settingsStore.settings.appHotkey || '未设置') }}
+            </button>
+            <button class="hotkey-manual-link" @click="openManualHotkey('appHotkey')">手动输入</button>
+          </div>
         </div>
         <div class="setting-item">
           <div class="setting-info">
             <label>打开主窗口</label>
             <p>从任意位置打开主窗口（按 Esc 取消录制）</p>
           </div>
-          <button
-            :class="['hotkey-record-badge', { recording: recordingHotkey === 'mainWindowHotkey' }]"
-            @click="startRecordHotkey('mainWindowHotkey')"
-          >
-            {{ recordingHotkey === 'mainWindowHotkey' ? '按下组合键...' : (settingsStore.settings.mainWindowHotkey || '未设置') }}
-          </button>
+          <div class="hotkey-input-group">
+            <button
+              :class="['hotkey-record-badge', { recording: recordingHotkey === 'mainWindowHotkey' }]"
+              @click="startRecordHotkey('mainWindowHotkey')"
+            >
+              {{ recordingHotkey === 'mainWindowHotkey' ? '按下组合键...' : (settingsStore.settings.mainWindowHotkey || '未设置') }}
+            </button>
+            <button class="hotkey-manual-link" @click="openManualHotkey('mainWindowHotkey')">手动输入</button>
+          </div>
         </div>
       </section>
 
@@ -352,6 +361,50 @@
         </div>
       </section>
 
+      <!-- 数据管理 -->
+      <section class="settings-section">
+        <h2>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+          </svg>
+          数据管理
+        </h2>
+        <div class="setting-item">
+          <div class="setting-info">
+            <label>数据存储位置</label>
+            <p class="setting-path">{{ dataPath || '加载中...' }}</p>
+          </div>
+        </div>
+        <div class="setting-item">
+          <div class="setting-info">
+            <label>立即备份</label>
+            <p>备份所有数据文件（项目、设置、工具等）</p>
+          </div>
+          <button class="btn btn-sm btn-primary" @click="handleBackup">立即备份</button>
+        </div>
+        <div class="setting-item">
+          <div class="setting-info">
+            <label>恢复默认设置</label>
+            <p>重置所有设置为默认值（保留编辑器列表和项目数据）</p>
+          </div>
+          <button class="btn btn-sm btn-danger-ghost" @click="handleResetSettings">恢复默认</button>
+        </div>
+        <div v-if="backups.length > 0" class="backup-list">
+          <p class="backup-list-title">备份记录（最多保留5个）</p>
+          <div v-for="backup in backups" :key="backup.name" class="backup-item">
+            <div class="backup-info">
+              <span class="backup-name">{{ backup.name }}</span>
+              <span class="backup-date">{{ backup.date }}</span>
+              <span class="backup-files">{{ backup.files.length }} 个文件</span>
+            </div>
+            <div class="backup-actions">
+              <button class="btn btn-sm" @click="handleRestore(backup.name)">恢复</button>
+              <button class="btn btn-sm btn-danger-ghost" @click="handleDeleteBackup(backup.name)">删除</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- 关于 -->
       <section class="settings-section">
         <h2>
@@ -407,6 +460,26 @@
         </div>
       </div>
     </div>
+
+    <!-- 手动快捷键输入对话框（用于 Alt+Space 等系统拦截的组合） -->
+    <div v-if="showManualHotkeyDialog" class="dialog-overlay" @click.self="showManualHotkeyDialog = false">
+      <div class="dialog" style="max-width: 380px;">
+        <div class="dialog-header">
+          <h2>手动输入快捷键</h2>
+          <button class="btn btn-ghost btn-icon" @click="showManualHotkeyDialog = false">✕</button>
+        </div>
+        <div class="dialog-body">
+          <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+            输入快捷键组合（用于录制无法捕获的系统组合键，如 Alt+Space）
+          </p>
+          <input v-model="manualHotkeyValue" class="input" placeholder="如 Alt+Space" @keyup.enter="confirmManualHotkey" autofocus />
+        </div>
+        <div class="dialog-footer">
+          <button class="btn" @click="showManualHotkeyDialog = false">取消</button>
+          <button class="btn btn-primary" @click="confirmManualHotkey" :disabled="!manualHotkeyValue.trim()">确定</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -429,6 +502,15 @@ const updateStatus = ref<'idle' | 'checking' | 'available' | 'latest' | 'downloa
 const updateVersion = ref('')
 const updateError = ref('')
 const downloadProgress = ref(0)
+
+// 数据管理
+const dataPath = ref('')
+const backups = ref<Array<{ name: string; date: string; files: string[] }>>([])
+
+// 手动快捷键输入
+const showManualHotkeyDialog = ref(false)
+const manualHotkeyValue = ref('')
+const manualHotkeyTarget = ref<'hotkey' | 'appHotkey' | 'mainWindowHotkey' | null>(null)
 
 // 添加编辑器表单状态
 const showEditorForm = ref(false)
@@ -478,13 +560,36 @@ onMounted(async () => {
   closeAction.value = settingsStore.settings.closeAction || ''
   await refreshEditors()
 
-  // 注册自动更新事件监听
+  // 从主进程获取当前更新状态（跨页面持久化）
+  try {
+    const state = await window.electronAPI.getUpdateState()
+    updateStatus.value = state.status as any
+    updateVersion.value = state.version || ''
+    updateError.value = state.error || ''
+    downloadProgress.value = state.progress || 0
+  } catch { /* ignore */ }
+
+  // 监听更新状态变化（实时同步）
+  window.electronAPI.onUpdateStateChanged((state) => {
+    updateStatus.value = state.status as any
+    updateVersion.value = state.version || ''
+    updateError.value = state.error || ''
+    downloadProgress.value = state.progress || 0
+  })
+
+  // 下载进度和完成事件
   window.electronAPI.onDownloadProgress((progress) => {
     downloadProgress.value = progress.percent
   })
   window.electronAPI.onUpdateDownloaded(() => {
     updateStatus.value = 'downloaded'
   })
+
+  // 加载数据路径和备份列表
+  try {
+    dataPath.value = await window.electronAPI.getDataPath()
+    await loadBackups()
+  } catch { /* ignore */ }
 })
 
 onBeforeUnmount(() => {
@@ -810,6 +915,107 @@ async function downloadUpdate() {
 
 async function installUpdate() {
   await window.electronAPI.installUpdate()
+}
+
+// ========== 数据备份与恢复 ==========
+
+async function loadBackups() {
+  try {
+    const result = await window.electronAPI.listBackups()
+    if (result.success) {
+      backups.value = result.backups
+    }
+  } catch (e) {
+    console.error('加载备份列表失败:', e)
+  }
+}
+
+async function handleBackup() {
+  try {
+    const result = await window.electronAPI.backupData()
+    if (result.success) {
+      alert(`备份成功: ${result.name}`)
+      await loadBackups()
+    } else {
+      alert('备份失败: ' + result.error)
+    }
+  } catch (e: any) {
+    alert('备份失败: ' + (e?.message || e))
+  }
+}
+
+async function handleRestore(backupName: string) {
+  if (!confirm(`确定要从备份 ${backupName} 恢复数据吗？当前数据将被覆盖。`)) return
+  try {
+    const result = await window.electronAPI.restoreBackup(backupName)
+    if (result.success) {
+      alert('恢复成功，请重新加载页面')
+      await settingsStore.loadSettings()
+      await refreshEditors()
+    } else {
+      alert('恢复失败: ' + result.error)
+    }
+  } catch (e: any) {
+    alert('恢复失败: ' + (e?.message || e))
+  }
+}
+
+async function handleDeleteBackup(backupName: string) {
+  if (!confirm(`确定要删除备份 ${backupName} 吗？`)) return
+  try {
+    const result = await window.electronAPI.deleteBackup(backupName)
+    if (result.success) {
+      await loadBackups()
+    } else {
+      alert('删除失败: ' + result.error)
+    }
+  } catch (e: any) {
+    alert('删除失败: ' + (e?.message || e))
+  }
+}
+
+// ========== 恢复默认设置 ==========
+
+async function handleResetSettings() {
+  if (!confirm('确定要恢复所有设置为默认值吗？\n（编辑器列表和项目数据不会被清除）')) return
+  try {
+    const defaults = await window.electronAPI.resetSettings()
+    // 更新本地状态
+    theme.value = defaults.theme
+    closeAction.value = defaults.closeAction || ''
+    await settingsStore.loadSettings()
+    await refreshEditors()
+    alert('已恢复默认设置')
+  } catch (e: any) {
+    alert('恢复失败: ' + (e?.message || e))
+  }
+}
+
+// ========== 手动快捷键输入（用于 Alt+Space 等系统拦截的组合） ==========
+
+function openManualHotkey(target: 'hotkey' | 'appHotkey' | 'mainWindowHotkey') {
+  manualHotkeyTarget.value = target
+  manualHotkeyValue.value = settingsStore.settings[target] || ''
+  showManualHotkeyDialog.value = true
+}
+
+async function confirmManualHotkey() {
+  if (!manualHotkeyTarget.value || !manualHotkeyValue.value.trim()) {
+    showManualHotkeyDialog.value = false
+    return
+  }
+  const combo = manualHotkeyValue.value.trim()
+  const target = manualHotkeyTarget.value
+  showManualHotkeyDialog.value = false
+  manualHotkeyTarget.value = null
+  manualHotkeyValue.value = ''
+  // 保存并重新注册快捷键
+  await settingsStore.updateSettings({ [target]: combo } as any)
+  try {
+    await window.electronAPI.restoreHotkeyRecord()
+  } catch (e) {
+    console.warn('restoreHotkeyRecord 失败:', e)
+  }
 }
 </script>
 
@@ -1319,5 +1525,77 @@ async function installUpdate() {
   background: var(--color-primary);
   border-radius: var(--radius-full);
   transition: width 0.2s ease;
+}
+
+/* 快捷键输入组 */
+.hotkey-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hotkey-manual-link {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 2px 4px;
+  white-space: nowrap;
+}
+
+.hotkey-manual-link:hover {
+  color: var(--color-primary);
+}
+
+/* 数据备份列表 */
+.backup-list {
+  margin-top: 12px;
+}
+
+.backup-list-title {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.backup-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  margin-bottom: 6px;
+}
+
+.backup-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.backup-name {
+  font-size: var(--font-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+  font-family: monospace;
+}
+
+.backup-date {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+}
+
+.backup-files {
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+}
+
+.backup-actions {
+  display: flex;
+  gap: 6px;
 }
 </style>

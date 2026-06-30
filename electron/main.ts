@@ -8,7 +8,8 @@ import { registerSearchHandlers } from './ipc/search'
 import { registerSettingsHandlers, getCurrentSettings, updateCurrentSettings } from './ipc/settings'
 import { registerGroupHandlers } from './ipc/group'
 import { registerToolHandlers } from './ipc/tool'
-import { initStore } from './store'
+import { initStore, migrateOldData, backupData, restoreBackup, listBackups, deleteBackup, cleanupOldBackups, cleanupOldInstallers } from './store'
+import type { Settings } from '../src/types'
 
 // 数据存储路径：使用 userData 目录（%APPDATA%/ProjectManagementTools），确保更新后数据不丢失
 const getDataPath = (): string => {
@@ -18,6 +19,25 @@ const getDataPath = (): string => {
 let mainWindow: BrowserWindow | null = null
 let searchWindow: BrowserWindow | null = null
 let tray: Tray | null = null
+
+// 更新安装时跳过关闭弹窗的标志
+let isQuittingForUpdate = false
+
+// 全局更新状态（跨页面持久化）
+const updateState = {
+  status: 'idle' as 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'error',
+  version: '',
+  error: '',
+  progress: 0
+}
+
+/** 更新全局状态并通知渲染进程 */
+function setUpdateState(partial: Partial<typeof updateState>): void {
+  Object.assign(updateState, partial)
+  if (mainWindow) {
+    mainWindow.webContents.send('updater:state-changed', { ...updateState })
+  }
+}
 
 // ==================== 单实例锁定 ====================
 const gotTheLock = app.requestSingleInstanceLock()
@@ -73,8 +93,8 @@ function createMainWindow(): void {
 
   // 关闭请求：按记忆行为直接执行，否则交由渲染进程弹窗确认
   mainWindow.on('close', (event) => {
-    if ((app as any).isQuitting) {
-      return // 允许真正退出
+    if ((app as any).isQuitting || isQuittingForUpdate) {
+      return // 允许真正退出（更新安装时直接退出）
     }
     event.preventDefault()
     const closeAction = getCurrentSettings().closeAction
@@ -352,54 +372,60 @@ function registerWindowHandlers(): void {
 
 // ==================== 自动更新 ====================
 // 配置 autoUpdater
-autoUpdater.autoDownload = false  // 不自动下载，由用户决定
-autoUpdater.autoInstallOnAppQuit = false  // 不在退出时自动安装
+autoUpdater.autoDownload = false  // 手动控制下载
+autoUpdater.autoInstallOnAppQuit = false
 
-// 检查更新
+// 检查更新（手动检查时由渲染进程调用）
 ipcMain.handle('updater:check', async () => {
   try {
+    setUpdateState({ status: 'checking', error: '' })
     const result = await autoUpdater.checkForUpdates()
     if (!result?.updateInfo) {
+      setUpdateState({ status: 'idle' })
       return { hasUpdate: false, version: null, releaseNotes: null }
     }
     const currentVersion = app.getVersion()
     const remoteVersion = result.updateInfo.version
-    // 比较版本号：只有远程版本大于当前版本才算有更新
     const hasUpdate = compareVersions(remoteVersion, currentVersion) > 0
+    if (hasUpdate) {
+      setUpdateState({ status: 'available', version: remoteVersion })
+    } else {
+      setUpdateState({ status: 'idle' })
+    }
     return { hasUpdate, version: remoteVersion, releaseNotes: result.updateInfo.releaseNotes || null }
   } catch (e) {
-    return { hasUpdate: false, version: null, error: (e as Error).message }
+    const msg = (e as Error).message
+    setUpdateState({ status: 'error', error: msg })
+    return { hasUpdate: false, version: null, error: msg }
   }
 })
 
 // 下载更新
 ipcMain.handle('updater:download', async () => {
   try {
+    setUpdateState({ status: 'downloading', progress: 0 })
     await autoUpdater.downloadUpdate()
     return true
   } catch (e) {
+    setUpdateState({ status: 'error', error: (e as Error).message })
     return false
   }
 })
 
-// 安装更新并重启
+// 安装更新并重启（设置标志跳过关闭弹窗）
 ipcMain.handle('updater:install', async () => {
+  isQuittingForUpdate = true
   autoUpdater.quitAndInstall()
 })
 
-// 获取自动更新设置
-ipcMain.handle('updater:getAutoDownload', async () => {
-  const settings = getCurrentSettings()
-  return settings.autoUpdate !== false  // 默认为 true
+// 获取当前更新状态（供渲染进程页面切换后恢复）
+ipcMain.handle('updater:getState', async () => {
+  return { ...updateState }
 })
 
-// 设置自动下载
-ipcMain.handle('updater:setAutoDownload', async (_event, enabled: boolean) => {
-  autoUpdater.autoDownload = enabled
-})
-
-// 下载进度事件转发到渲染进程
+// 下载进度事件：更新全局状态并转发
 autoUpdater.on('download-progress', (progress) => {
+  setUpdateState({ status: 'downloading', progress: progress.percent })
   if (mainWindow) {
     mainWindow.webContents.send('updater:download-progress', {
       percent: progress.percent,
@@ -409,11 +435,81 @@ autoUpdater.on('download-progress', (progress) => {
   }
 })
 
-// 下载完成事件
+// 下载完成事件：更新状态、通知托盘、转发
 autoUpdater.on('update-downloaded', () => {
+  setUpdateState({ status: 'downloaded', progress: 100 })
   if (mainWindow) {
     mainWindow.webContents.send('updater:update-downloaded')
   }
+  // 托盘气泡通知
+  tray?.displayBalloon({
+    iconType: 'info',
+    title: '更新已下载',
+    content: `新版本 ${updateState.version} 已下载完成，即将重启安装。`
+  })
+})
+
+// ==================== 数据备份与恢复 IPC ====================
+ipcMain.handle('data:backup', async () => {
+  try {
+    const name = backupData()
+    cleanupOldBackups(5)
+    return { success: true, name }
+  } catch (e) {
+    return { success: false, error: (e as Error).message }
+  }
+})
+
+ipcMain.handle('data:restore', async (_event, backupName: string) => {
+  try {
+    restoreBackup(backupName)
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: (e as Error).message }
+  }
+})
+
+ipcMain.handle('data:listBackups', async () => {
+  try {
+    return { success: true, backups: listBackups() }
+  } catch (e) {
+    return { success: false, backups: [], error: (e as Error).message }
+  }
+})
+
+ipcMain.handle('data:deleteBackup', async (_event, backupName: string) => {
+  try {
+    deleteBackup(backupName)
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: (e as Error).message }
+  }
+})
+
+ipcMain.handle('data:getPath', async () => {
+  return app.getPath('userData')
+})
+
+// 重置设置为默认值（保留编辑器列表）
+ipcMain.handle('settings:reset', async () => {
+  const current = getCurrentSettings()
+  const resetSettings: Partial<Settings> = {
+    workspacePath: 'D:\\Projects',
+    toolWorkspacePath: '',
+    hotkey: 'Alt+Space',
+    appHotkey: 'Ctrl+F',
+    mainWindowHotkey: 'Alt+W',
+    theme: 'system' as 'light' | 'dark' | 'system',
+    defaultEditorId: '',
+    firstRun: false,
+    autoUpdate: true,
+    closeAction: '',
+    // 保留用户编辑器数据
+    editors: current.editors || [],
+    customEditors: current.customEditors || []
+  }
+  updateCurrentSettings(resetSettings)
+  return resetSettings
 })
 
 // ==================== 应用启动 ====================
@@ -422,6 +518,25 @@ app.whenReady().then(() => {
   // 初始化数据存储
   const dataPath = getDataPath()
   initStore(dataPath)
+
+  // 迁移旧数据（从安装目录的 data/ 迁移到 userData）
+  if (app.isPackaged) {
+    const oldDataPath = join(process.resourcesPath, '..', 'data')
+    try {
+      migrateOldData(oldDataPath)
+    } catch (e) {
+      console.warn('[Main] 旧数据迁移失败:', e)
+    }
+  }
+
+  // 启动时自动备份并清理旧备份和旧安装包
+  try {
+    backupData()
+    cleanupOldBackups(5)
+    cleanupOldInstallers()
+  } catch (e) {
+    console.warn('[Main] 启动备份/清理失败:', e)
+  }
 
   // 注册 IPC handlers
   registerWindowHandlers()
@@ -449,6 +564,40 @@ app.whenReady().then(() => {
 
   // 创建系统托盘
   createTray()
+
+  // 启动后自动检查更新（延迟5秒，避免阻塞启动）
+  const settings = getCurrentSettings()
+  if (settings.autoUpdate !== false) {
+    setTimeout(async () => {
+      try {
+        setUpdateState({ status: 'checking' })
+        const result = await autoUpdater.checkForUpdates()
+        if (result?.updateInfo) {
+          const currentVersion = app.getVersion()
+          const remoteVersion = result.updateInfo.version
+          if (compareVersions(remoteVersion, currentVersion) > 0) {
+            // 发现新版本，自动下载
+            setUpdateState({ status: 'available', version: remoteVersion })
+            // 托盘提示正在下载
+            tray?.displayBalloon({
+              iconType: 'info',
+              title: '发现新版本',
+              content: `正在后台下载 v${remoteVersion}...`
+            })
+            setUpdateState({ status: 'downloading', progress: 0 })
+            await autoUpdater.downloadUpdate()
+          } else {
+            setUpdateState({ status: 'idle' })
+          }
+        } else {
+          setUpdateState({ status: 'idle' })
+        }
+      } catch (e) {
+        console.warn('[Main] 自动检查更新失败:', e)
+        setUpdateState({ status: 'idle' })
+      }
+    }, 5000)
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

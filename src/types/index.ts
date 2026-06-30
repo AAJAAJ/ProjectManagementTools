@@ -169,8 +169,16 @@ export interface ElectronAPI {
   // 设置
   getSettings(): Promise<Settings>
   updateSettings(settings: Partial<Settings>): Promise<Settings>
+  resetSettings(): Promise<Settings>
   prepareHotkeyRecord(): Promise<void>
   restoreHotkeyRecord(): Promise<void>
+
+  // 数据备份与恢复
+  backupData(): Promise<{ success: boolean; name?: string; error?: string }>
+  restoreBackup(backupName: string): Promise<{ success: boolean; error?: string }>
+  listBackups(): Promise<{ success: boolean; backups: Array<{ name: string; date: string; files: string[] }>; error?: string }>
+  deleteBackup(backupName: string): Promise<{ success: boolean; error?: string }>
+  getDataPath(): Promise<string>
 
   // 工具管理
   getTools(): Promise<ToolItem[]>
@@ -201,6 +209,8 @@ export interface ElectronAPI {
   checkForUpdates(): Promise<{ hasUpdate: boolean; version: string | null; releaseNotes: any; error?: string }>
   downloadUpdate(): Promise<boolean>
   installUpdate(): Promise<void>
+  getUpdateState(): Promise<{ status: string; version: string; error: string; progress: number }>
+  onUpdateStateChanged(callback: (state: { status: string; version: string; error: string; progress: number }) => void): void
   onDownloadProgress(callback: (progress: { percent: number; transferred: number; total: number }) => void): void
   onUpdateDownloaded(callback: () => void): void
 }
